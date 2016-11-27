@@ -1,0 +1,36 @@
+#
+# $Id: prototype,v 1.1 2000/08/25 05:07:45 z60hc70 Exp $
+#
+i pkginfo
+i request
+
+!default 0555 $OWNER $GROUP
+d none $PKG
+d none $PKG/lib
+d none $PKG/include
+
+!search ./
+f none $PKG/lib/libcm.a 0555 $OWNER $GROUP
+f none $PKG/include/cm_heap.h  0444 $OWNER $GROUP
+f none $PKG/include/cm_list.h  0444 $OWNER $GROUP
+f none $PKG/include/cm_set.h   0444 $OWNER $GROUP
+f none $PKG/include/cm_stack.h 0444 $OWNER $GROUP
+f none $PKG/include/cm_table.h 0444 $OWNER $GROUP
+#
+# Some links.
+#
+d none /usr ? ? ?
+d none /usr/lib ? ? ?
+s none /usr/lib/libcm.a=$BASEDIR/$PKG/lib/libcm.a
+d none /usr/include ? ? ?
+s none /usr/include/cm_heap.h=$BASEDIR/$PKG/include/cm_heap.h
+s none /usr/include/cm_list.h=$BASEDIR/$PKG/include/cm_list.h 
+s none /usr/include/cm_set.h=$BASEDIR/$PKG/include/cm_set.h  
+s none /usr/include/cm_stack.h=$BASEDIR/$PKG/include/cm_stack.h
+s none /usr/include/cm_table.h=$BASEDIR/$PKG/include/cm_table.h
+
+
+
+
+
+

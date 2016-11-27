@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# $Id: request,v 1.1 2000/08/25 05:07:45 z60hc70 Exp $
+#
+PARAMS="BASEDIR"
+
+for var in $PARAMS ; do
+  value=`eval echo $\{$var\}`
+  echo "Enter $var [ $value ]: \c"
+  read new_value
+  if [ "$new_value" = "" ] ; then
+	  new_value=$value
+  fi
+  echo "$var=\"$new_value\""  >> $1
+
+done

@@ -1,0 +1,1293 @@
+\input texinfo   @c -*-texinfo-*-
+@c %**start of header
+@setfilename libcm.info
+@settitle The Libcm Container-Class Library
+@iftex
+@afourpaper
+@end iftex
+@c %**end of header
+     
+@titlepage
+@title The Libcm Container-Class Library
+@subtitle October 16, 1995
+@author Cris Merritt
+@end titlepage
+
+@node Top, Overview, (dir), (dir)
+
+@ifinfo
+This document describes the @dfn{libcm} container-class library.  
+@end ifinfo
+
+@menu
+* Overview::                    
+* List Class::                  
+* Table Class::                 
+* Num Macros::                  
+* Stacks::                      
+* Sets::                        
+* Conventions::                 
+
+ --- The Detailed Node Listing ---
+
+List Class
+
+* Creating a new list::         
+* Adding entries to a list::    
+* Retrieving entries from a list::  
+* Determining the length of a list::  
+* Operating on the head and tail of a list::  
+* Deleting entries from a list::  
+* Freeing a list::              
+
+Table Class
+
+* Creating a new table::        
+* Adding entries to a table::   
+* Retrieving entries from a table::  
+* Deleting entries from a table::  
+* Freeing a table::             
+* Determining the size of a table::  
+* Table example::               
+* Operations on entry order::   
+* Multidimensional comparison functions::  
+* Advanced memory management issues::  
+@end menu
+
+@node Overview, List Class, Top, Top
+@chapter Overview
+
+Libcm is a library of container classes in C:
+
+@itemize @bullet
+@item
+A @dfn{List} class for storing sequences.
+
+@item 
+A @dfn{Table} class for storing mappings from an ordered index space.
+
+@item
+A @dfn{Set} class for storing collections of unique objects.
+
+@item
+A @dfn{Stack} class.
+@end itemize
+
+The data structures are based on an @dfn{AVL} tree (a balanced binary tree)
+@footnote{Invented 1962 by G. M. Adel'son-Vel'skii and Y. M. Landis} which
+ensures that all data structure accesses are O(log2(N)).  The implementations
+are small, fast and correct.  The interfaces to the data structures are very
+spare and uniform.  All data structures are completely dynamic; they place no
+limit on the number of elements which may be entered and never allocate more
+memory than is needed at a given time.
+
+@node List Class, Table Class, Overview, Top
+@chapter List Class
+
+The @code{cm_List} class is used for storing sequences of objects.  This
+functionality is often implemented by a linked list.  A linked list, however,
+has the drawback that finding the @var{N}th element of the list is an
+O(@var{N}) operation. That is, finding the 100th element of the list requires
+beginning at the head of the list and traversing 100 pointers to arrive at the
+desired element.  Finding an element near the end of the list may take much
+longer than finding an element near the the beginning of the list.
+
+The @code{cm_List} class solves this problem by storing the elements in a
+balanced binary tree.  In this structure, finding any element is an O(log2(@var{N}))
+operation. That is, finding any element never requires traversing more than
+log2(@var{N}) pointers where @var{N} is the the number of elements in the
+sequence.  The function log2(@var{N}) has the desirable property of increasing
+very slowly as @var{N} increases.  This means the list can become very large
+without without appreciably degrading access time.
+
+@menu
+* Creating a new list::         
+* Adding entries to a list::    
+* Retrieving entries from a list::  
+* Determining the length of a list::  
+* Operating on the head and tail of a list::  
+* Deleting entries from a list::  
+* Freeing a list::              
+@end menu
+
+@node Creating a new list, Adding entries to a list, List Class, List Class
+@section Creating a new list
+
+To use the @code{cm_List} class we must include the header file
+@file{cm_list.h}:
+
+@example
+#include "cm_list.h"
+@end example
+
+We may then create a new list with the function @code{cm_list_new}:
+
+@example
+cm_List* list = cm_list_new();
+@end example
+
+@code{cm_list_new()} allocates, initializes and returns a pointer to a new list
+object.  If sufficient memory cannot be allocated, @code{cm_list_new} returns a
+@code{NULL} pointer.
+
+We'll describe the use of the @code{cm_List} class by example, creating types
+and functions for representing points and shapes.  It should be clear that the
+``point'' and ``shape'' types and functions which we present are strictly for
+the sake of example and not part of Libcm.
+
+Consider representing the perimeter of a shape as sequence of points @{x,y@}
+connected by line segments.  We represent a point by a structure as follows:
+
+@example
+typedef struct @{
+  int x, y;
+@} Point;
+@end example
+
+A shape may then be represented as a list of points as follows:
+
+@example
+typedef struct @{
+  cm_List* point_list;
+@} Shape;
+@end example
+
+We can now define a function to create a new shape:
+
+@example
+Shape* 
+shape_new ()
+@{
+  Shape* shape = malloc (sizeof (Shape));
+  shape->point_list = cm_list_new ();  /* create new cm_List */
+  return shape;
+@}
+@end example
+
+@code{shape_new()} allocates a new @code{Shape} object. @code{shape_new()}
+allocates a new Shape object, then calls @code{cm_list_new()} to initialize the
+point list:
+
+@node Adding entries to a list, Retrieving entries from a list, Creating a new list, List Class
+@section Adding entries to a list
+
+Once a list is created, an entry may be added with @code{cm_list_put()}:
+
+@example
+void* cm_list_put (cm_List* list, unsigned int index, void* contents);
+@end example
+
+The first parameter to @code{cm_list_put()} is the pointer to the
+@code{cm_List} object returned by @code{cm_list_new()}, indicating the list in
+which to add the entry.  The second parameter is an index indicating where in
+the @code{cm_List} to add the entry.  The third parameter is a pointer which
+shall be the contents of the new entry.  @code{cm_list_put} returns the
+@code{contents} argument, or a @code{NULL}-pointer in the case that memory for
+the new entry could not be allocated.
+
+Entries of the list are indexed from zero.  Adding an entry at an index already
+occupied by another entry automatically increments the indexes of the existing
+entry and all following entries.  Attempting to put an entry at an index
+greater than the current length of the list is an error, in which case
+@code{cm_list_put()} will return @code{NULL}.
+
+We can now use @code{cm_list_put()} to write the function
+@code{shape_add_point()}, a function for adding a point to a shape:
+
+@example
+Point* 
+shape_add_point (Shape* shape, int x, int y)
+@{
+  Point* point = point_new (x, y);
+  return cm_list_put (shape->point_list, 0, point);
+@}
+@end example
+
+The function @code{point_new()}, called by @code{shape_add_point()}, is defined
+as follows:
+
+@example
+Point*
+point_new (int x, int y)
+@{
+  Point* point = malloc (sizeof (Point));
+  point->x = x;  point->y = y;
+  return point;
+@}
+@end example
+
+Note that the contents argument to @code{cm_list_put()} is a @code{void*}
+pointer.  We always stores pointers in a @code{cm_List} and these pointers must
+refer to valid memory static or dynamic memory addresses.  Entering a pointer
+to automatic (stack) memory is asking for trouble since the referenced memory
+will be deallocated when the function in which it is defined returns.
+
+Finally, it is worth noting that our examples adhere to an object-oriented
+programming style in which a set of ``shape'' functions operate on @code{Shape}
+structures.  By adhering to the convention that all ``shape'' functions take a
+Shape pointer as their first argument, we establish a C++-style
+``member-function'' relationship between functions and structures.  Libcm
+integrates particularly well into this programming style.
+
+@node Retrieving entries from a list, Determining the length of a list, Adding entries to a list, List Class
+@section Retrieving entries from a list
+
+We may retrieve entries from a list with @code{cm_list_get()}.  As with
+@code{cm_list_put()}, the first argument to @code{cm_list_get()} is the list
+and the second argument is the index:
+
+@example
+void* cm_list_get (cm_List* list, unsigned int index);
+@end example
+
+Continuing with our ``shape'' example, we now write @code{shape_copy()} to
+duplicate a shape.  Specifically, we use @code{cm_list_get()} to retrieve each
+of the points of a shape and insert identical points in a second shape:
+
+@example
+Shape*
+shape_copy (Shape* shape)
+@{
+  Shape* new_shape = shape_new ();  /* create empty shape */
+  Point* point;
+  int i;
+   
+  for (i = 0;  point = cm_list_get (shape->point_list, i);  i++)
+    cm_list_put (new_shape->point_list, i, point_copy (point));
+  
+  return new_shape;
+@}
+@end example       
+
+@code{point_copy()}, called by @code{shape_copy()}, is defined as follows:
+
+@example
+Point*
+point_copy (Point* point)
+@{
+  return point_new (point->x, point->y);
+@}
+@end example
+
+Note in this example how the while-loop in @code{shape_copy} sequences through
+all entries in the list by incrementing the index and exiting when
+@code{cm_list_get()} returns @code{NULL}.  Sequencing through a list in this
+manner is idiomatic.
+
+@node Determining the length of a list, Operating on the head and tail of a list, Retrieving entries from a list, List Class
+@section Determining the length of a list
+
+We may determine the length of a list with the macro @code{cm_list_size}, which
+takes a list as its single argument and evaluates the length of the list:
+
+@example
+#define cm_list_size(list) ... 
+@end example
+
+We can use @code{cm_list_size()}, for example, to reimplement
+@code{shape_copy()} with an alternate method for sequencing through
+@code{shape->point_list}:
+
+@example
+Shape*
+shape_copy (Shape* shape)
+@{
+  Shape* new_shape = shape_new ();  /* create empty shape */
+  int i;
+
+  for (i = 0;  i < cm_list_size (shape->point_list);  i++)
+  @{ 
+    Point* point = cm_list_get (shape->point_list, i);
+    cm_list_put (new_shape->point_list, i, point_copy (point));
+  @}
+
+  return new_shape;
+@}
+@end example      
+
+Note that because @code{cm_list_size()} is a very simple macro (see
+@file{cm_list.h}), not a function, it may be used within a loop, as in this
+example, without sacrificing efficiency.
+
+@node Operating on the head and tail of a list, Deleting entries from a list, Determining the length of a list, List Class
+@section Operating on the head and tail of a list
+
+It is particularly common to put, get or delete entries from the head or tail
+of a list.  To facilitate these operations, there is a set of ``head'' and
+``tail'' macros.  The definitions of these macros are self-explanatory:
+
+@example
+#define cm_list_put_head(list, contents) \ 
+  cm_list_put (list, 0, contents)
+
+#define cm_list_put_tail(list, contents) \ 
+  cm_list_put (list, cm_list_size (list), contents)
+
+#define cm_list_get_head(list) \ 
+  cm_list_get (list, 0)
+
+#define cm_list_get_tail(list) \ 
+  cm_list_get (list, cm_list_size (list) - 1)
+
+#define cm_list_del_head(list) \ 
+  cm_list_del (list, 0)
+
+#define cm_list_del_tail(list) \ 
+  cm_list_del (list, cm_list_size (list) - 1)
+@end example
+
+As an example, using @code{cm_list_put_tail()}, we can now cleanly reimplement
+@code{shape_add_point()} to append new entries to the point-list instead of
+prepending them.  Note that, because a @code{cm_List} is an AVL tree, appending
+points to the list is just as efficient as prepending them.
+
+@example
+Point* 
+shape_add_point (Shape* shape, int x, int y)
+@{
+  return cm_list_put_tail (shape->point_list, point_new (x, y));
+@}
+@end example
+
+@node Deleting entries from a list, Freeing a list, Operating on the head and tail of a list, List Class
+@section Deleting entries from a list
+
+@code{cm_list_del()} function deletes the indexed entry from a list and returns
+the contents of the deleted entry:
+
+@example
+void* cm_list_del (cm_List* list, unsigned int index);
+@end example
+
+If the address returned by @code{cm_list_del()} refers to memory allocated on
+the heap, we must either free the memory or save its address somewhere for
+later deallocation.  Deleting an entry from a list does not free any memory
+which may have been referenced by the contents of that entry.
+
+Continuing with our ``shape'' example, we use @code{cm_list_del()} to write a
+function to reverse the order of a shape's point-list (suppose, for example,
+that the perimeter of a shape represents a circuit and that the direction of
+the circuit is significant).  We reverse the order of the point list by
+exchanging points equidistant from the middle of the point list:
+
+@example
+Shape*
+shape_reverse (Shape* shape)
+@{
+  int i, j; 
+
+  for (i = 0, j = cm_list_size (shape->point_list) - 1;  
+       i < j;  
+       i++, j--)
+  @{
+    /* NB: the order of deletion and reinsertion is important */
+    Point* point1 = cm_list_del (shape->point_list, j);
+    Point* point2 = cm_list_del (shape->point_list, i);
+    cm_list_put (shape->point_list, i, point1);
+    cm_list_put (shape->point_list, j, point2);
+  @}
+
+  return shape;
+@}
+@end example
+
+@node Freeing a list,  , Deleting entries from a list, List Class
+@section Freeing a list
+
+When a list is no longer needed, it may be deallocated with
+@code{cm_list_free()}.  This function frees the list object along with all its
+entries.  @code{cm_list_free()} takes as its single argument the list to be
+freed and returns @code{NULL}:
+
+@example
+cm_List* cm_list_free (cm_List* list);
+@end example
+
+It must be stressed that freeing a list does not free any memory which may be
+referenced by the entries of the list.  If allocated memory is referenced by
+the entries of the list, the application must retrieve the entries and 
+free the referenced memory or otherwise manage the references.
+
+The following function destroys a shape created with @code{shape_new()},
+illustrating the process of tearing down and freeing a list and completing our
+@code{Shape} class:
+
+@example
+void
+shape_free (Shape* shape)
+@{       
+  while (cm_list_size (shape->point_list) > 0)
+    point_free (cm_list_del_head (shape->point_list));
+  cm_list_free (shape->point_list);
+  free (shape);
+@}
+@end example
+
+@example
+void
+point_free (Point* point)
+@{
+  free (point);
+@}
+@end example
+
+@node Table Class, Num Macros, List Class, Top
+@chapter Table Class
+
+The @code{cm_Table} class facilitates storage of data by unique indexes of any
+type.  A @code{cm_Table} represents a mapping from an ordered space of indexes
+to a space of associated values.  In a @code{cm_Table}, each entry is
+permanently associated with a particular index and no two entries may be
+associated with the same index.
+
+The @code{cm_Table} class requires that we specify a @dfn{comparison function},
+which imposes an ordering on the set of possible indexes of the table.
+Specifically, the comparison function takes 2 indexes as arguments and returns
+an integer as follows:
+
+@table @var
+@item a negative number	
+if @var{index1} is less than (precedes) @var{index2}
+
+@item zero
+if @var{index1} is identical to @var{index2}
+
+@item a positive number	
+if @var{index1} is greater than (succeeds) @var{index2}
+@end table
+
+For case where indexes are null-terminated strings, for example, the standard
+C-library function @code{strcmp()} is an appropriate comparison function.
+
+If we specify @code{NULL} as the comparison function, then the table uses a
+built-in comparison function which considers indexes as generic values and
+compares them directly by subtracting index2 from index1.  See section 3.8.
+
+@menu
+* Creating a new table::        
+* Adding entries to a table::   
+* Retrieving entries from a table::  
+* Deleting entries from a table::  
+* Freeing a table::             
+* Determining the size of a table::  
+* Table example::               
+* Operations on entry order::   
+* Multidimensional comparison functions::  
+* Advanced memory management issues::  
+@end menu
+
+@node Creating a new table, Adding entries to a table, Table Class, Table Class
+@section Creating a new table
+
+To use the @code{cm_Table} class we include @file{cm_table.h}:
+
+@example
+#include "cm_table.h"
+@end example
+
+We create a new table with @code{cm_table_new()}:
+
+@example
+cm_Table* cm_table_new (int (*cmp_func)(void*, void*));
+@end example
+
+For example, say we have a set of "Employee" records defined as follows:
+
+@example
+typedef struct @{
+  char* name;     /* employee name */
+  int salary;     /* in clams */
+@} Employee;
+@end example
+       
+Assuming that each employee has a different name, we may store the employee
+records in a @code{cm_Table} indexed by the "name" field.  So, using
+@code{strcmp()} as our comparison function, we create the table as follows:
+
+@example
+#include <string.h>  /* include declaration of strcmp */
+
+cm_Table *employees_by_name = cm_table_new (strcmp);
+@end example
+
+@node Adding entries to a table, Retrieving entries from a table, Creating a new table, Table Class
+@section Adding entries to a table
+
+Once a table is created, we can add entries with @code{cm_table_put()}:
+
+@example
+void* cm_table_put (cm_Table* table, void* index, void* contents);
+@end example
+
+The first parameter of @code{cm_table_put()} is the @code{cm_Table} object
+returned from @code{cm_table_new()}.  The second parameter is the index of the
+entry.  The third parameter is the contents of the entry.  The index and
+contents parameters are declared as generic pointers and are opaque to the
+@code{cm_Table}; only the comparison function knows the types of the indexes.
+If memory for the entry cannot be allocated or there is already an entry at the
+specified index, @code{cm_table_put} returns @code{NULL} to indicate failure.
+If the entry is successfully inserted, @code{cm_table_put} returns the contents
+argument.
+
+In our "Employees" table, for example, we can add an employee as follows:
+
+@example
+cm_table_put (employees_by_name, employee->name, employee);
+@end example
+
+@node Retrieving entries from a table, Deleting entries from a table, Adding entries to a table, Table Class
+@section Retrieving entries from a table
+
+We may retrieve an entry from the table with @code{cm_table_get}:
+
+@example
+void* cm_table_get (cm_Table* table, void* index);
+@end example
+
+Once again, the first parameter is the @code{cm_Table} and the second parameter
+is the index of the entry.  @code{cm_table_get} returns the contents of the
+entry or @code{NULL} if the entry does not exist.  For example:
+
+@example
+employee = cm_table_get (employees_by_name, "Fred");
+@end example
+
+@node Deleting entries from a table, Freeing a table, Retrieving entries from a table, Table Class
+@section Deleting entries from a table
+
+Entries may be removed from a table with @code{cm_table_del}:
+
+@example
+void* cm_table_del (cm_Table* table, void* index);
+@end example
+
+For example:
+
+@example
+employee = cm_table_del (employees_by_name, "Fred");
+@end example
+
+Remember that when we delete an entry the contents are returned, not freed.
+
+@node Freeing a table, Determining the size of a table, Deleting entries from a table, Table Class
+@section Freeing a table
+
+A table can be freed with @code{cm_table_free}:
+
+@example
+cm_Table* cm_table_free (cm_Table* table);
+@end example
+
+@code{cm_table_free} deletes all the entries in the table and then frees the
+table itself.  However, if dynamic memory is referenced by the entries of the
+table, freeing the table does not free the referenced memory.
+@code{cm_table_free} always returns @code{NULL}.
+
+@node Determining the size of a table, Table example, Freeing a table, Table Class
+@section Determining the size of a table
+
+The macro @code{cm_table_size} evaluates the number of entries in a table:
+
+@example
+#define cm_table_size(table) ...
+@end example
+
+@node Table example, Operations on entry order, Determining the size of a table, Table Class
+@section Table example
+
+We can now write a simple program with the table class.  This program maintains
+a table of employees indexed by employee name, in which entries can to looked
+up, added or removed.
+
+@example
+#include <string.h>    /* for strcmp */
+#include "cm_table.h"
+
+typedef struct @{
+  char* name;    /* employee name */
+  int salary;    /* in clams */
+@} Employee;
+
+Employee*
+employee_new (char* name, int salary)
+@{
+  Employee* e = (Employee*) malloc (sizeof (Employee));
+  e->name = strdup (name);
+  e->salary = salary;
+  return e;
+@}
+@end example
+
+@example
+Employee*
+employee_free (Employee* e)
+@{       
+  free (e->name);
+  free (e);
+  return NULL;
+@}
+@end example
+
+@example
+Employee*
+employee_print (Employee* e)
+@{       
+  printf ("%s %d\\n", e->name, e->salary);
+@}
+@end example
+
+@example
+int
+main ()
+@{ 
+  cm_Table* employees_by_name = cm_table_new (strcmp);
+  int       done = 0;
+
+  while (!done)
+  @{
+    char c;
+    char name [256];
+    int  salary;
+    
+    printf ("> ");  /* prompt for command */
+    scanf ("%c", c);
+
+    switch (cmd[0])
+    @{
+      case 'p':  /* add (put) an employee */
+      scanf ("%s %d", name, &salary);
+      e = employee_new (name, salary);
+      cm_table_put (employees_by_name, e->name, e)
+        ? employee_print (e)
+        : employee_free (e);  /* employee already in table */
+      break;
+
+      case 'g':  /* look up (get) an employee */
+      scanf ("%s", name);
+      if (e = cm_table_get (employees_by_name, name))
+        employee_print (e);
+      break;
+
+      case 'd':
+      scanf ("%s", name);
+      if (e = cm_table_del (employees_by_name, name))
+        employee_print (e), employee_free (e);
+      break;
+
+      case 'q':
+      done = 1;
+      break;
+    @}
+  @}
+@}
+@end example
+        
+
+@node Operations on entry order, Multidimensional comparison functions, Table example, Table Class
+@section Operations on entry order
+
+The table class provides functions which operate on the ordering imposed by the
+comparison function:
+
+@example
+void* cm_table_get_prev (cm_Table* table, void** index_ref);
+
+void* cm_table_get_next (cm_Table* table, void** index_ref);
+
+void* cm_table_del_prev (cm_Table* table, void** index_ref);
+
+void* cm_table_del_next (cm_Table* table, void** index_ref);
+
+void* cm_table_get_min (cm_Table* table, void** index_ref);
+
+void* cm_table_get_max (cm_Table* table, void** index_ref);
+
+void* cm_table_del_min (cm_Table* table, void** index_ref);
+
+void* cm_table_del_max (cm_Table* table, void** index_ref);
+@end example
+
+@code{cm_table_get_prev()} returns the contents of the entry with the largest
+index strictly less than the index referred to (pointed to) by the
+@code{index_ref} (second) argument.  If @code{cm_table_get_prev()} finds such
+an entry, it overwrites the index referred to by @code{index_ref}, assigning it
+the index of the found entry.  If @code{cm_table_get_prev()} finds no such
+entry, it returns @code{NULL} and the index referred to by @code{index_ref} is
+unchanged.
+
+Similarly, @code{cm_table_get_next()} returns the contents of the entry with
+the smallest index strictly greater than the index referred to (pointed to) by
+the @code{index_ref} argument.  If @code{cm_table_get_next()} finds such an
+entry, it overwrites the index referred to by @code{index_ref}, assigning it
+the index of the found entry.  If @code{cm_table_get_next()} finds no such
+entry, it returns @code{NULL} and the index referred to by @code{index_ref} is
+unchanged.
+
+@code{cm_table_del_prev()} and @code{cm_table_del_next()} work just like 
+@code{cm_table_get_prev()} and @code{cm_table_get_next()}, respectively,
+but they also delete the found entry.
+
+@code{cm_table_get_min()} returns the contents of the entry with the minimal
+index.  @code{cm_table_get_max()} returns the contents of entry with the
+maximal index.  The @code{index_ref} argument to @code{cm_table_get_min()} and
+@code{cm_table_get_max()} is optional:  if @code{index_ref} is non-null, the
+referred-to index is assigned the index of the found entry.
+
+@code{cm_table_del_min()} and @code{cm_table_del_max()} world just like 
+@code{cm_table_get_min()} and @code{cm_table_get_max()}, respectively,
+but they also delete the found entry.
+
+To illustrate the use of these functions, imagine representing a signal as a
+sequence of events over time, where an event represents the moment at which a
+signal assumes a new value.  We represent an event as follows:
+
+@example
+typedef struct @{
+  int time;
+  int value;
+@} Event;
+@end example
+
+We then represent a signal as a @code{cm_Table} of @code{Events} indexed by
+time:
+
+@example
+typedef struct @{
+  cm_Table* events_by_time;
+@} Signal;
+@end example
+
+We write functions for creating a new signal object and for adding events to
+the signal:
+
+@example
+Signal*
+signal_new (void)
+@{
+  Signal* signal = malloc (sizeof (Signal));
+  signal->events_by_time = cm_table_new (NULL);
+  return signal;
+@}
+
+Event*
+signal_add_event (int time, int value)
+@{
+  Event* event = malloc (sizeof (Event));
+  event->time = time;
+  event->value = value;
+  return cm_table_put (signal->events_by_time, event->time, event);
+@}
+@end example
+
+Finally, we build a signal:
+
+@example
+int E [] = @{
+   0, 50,
+   4, 48,
+   9, 55,
+   5, 62,
+   8, 43
+@};
+
+main ()
+@{
+  Signal = signal_new ();
+  int* e = E;
+
+  /* enter events in table */
+  while (e < E + sizeof E)
+  @{
+    int time = *e++;
+    int value = *e++;
+    signal_add_event (signal, time, value);
+  @}
+
+  /* etc... */
+@end example
+
+Several things are now worth noting.  First, note that we specify @code{NULL}
+as argument to @code{cm_table_new()} in signal_new.  Recall that when we
+specify @code{NULL} as the comparison function, @code{cm_Table} uses a built-in
+comparison function which compares indexes directly.  In this case, the indexes
+are integers.  Strictly, this is "cheating" because the table class considers
+indexes to be pointers (void*).  In practice, however, @code{void*} and
+@code{int} are the same size of most machines and we will get away with
+cheating.
+
+Secondly, note that the static array @code{E} from which we read values to
+build the signal does not order the events in time.  This is okay because the
+events are naturally sorted simply by entering them in the table.
+
+We can now proceed to use @code{cm_Table}'s order operations to write other
+functions which operated on signals.  One common application of 
+@code{cm_table_get_next()} is to sequence through the entries of a table
+in order.  We might write a function, for example, to print the signal data as
+follows:
+
+@example
+void
+signal_print (Signal* signal, FILE* out)
+@{
+  Event* event;
+  int time;
+
+  for (event = cm_table_get_min (signal->events_by_time, &time);
+       event;
+       event = cm_table_get_next (signal->events_by_time, &time))
+  @{
+    fprintf (out, "%d %d\\n", event->time, event->value);
+  @}
+@}
+@end example
+
+In signal_print, we use @code{cm_table_get_min} to get the first event.  We
+pass @code{cm_table_get_min} a reference to the variable time;
+@code{cm_table_get_min} assigns the time of the first event to this reference.
+We then then use @code{cm_table_get_next} to find subsequent events, passing
+the same time reference.  When @code{cm_list_get_next} finds the next event in
+the sequence, it assigns the time of that event to the time reference.  If we
+do not alter the time variable and call @code{cm_table_get_next} repeatedly, we
+will sequence through all entries of the table.  After @code{cm_list_get_next}
+has returned the last event in the table, subsequent calls to
+@code{cm_list_get_next} return @code{NULL}.  This way of sequencing through a
+table is idiomatic.
+
+If we know that all indexes in a table are greater than some value we can
+simplify the sequencing idiom slightly.  For example, if we know that all times
+in the the table are non-negative, we can implement signal_print alternatively
+as follows:
+
+@example
+void
+signal_print (Signal* signal, FILE* out)
+@{
+  Event* event;
+  int time = -1;  /* -1 less than all event times in table */
+
+  while (event = cm_table_get_next (signal->events_by_time, &time))
+    fprintf (out, "%d %d\\n", event->time, event->value);
+@}
+@end example
+
+We would obviously like a function which returns the value of a signal at a
+given time.  This is a natural application of @code{cm_table_get_prev()}.
+The value of a signal at a given time is the value of the latest event before
+or at that time:
+
+@example
+int
+signal_get_value (Signal* signal, int time);
+@{
+  /* add 1 to time so 'get_prev finds an event at <time> */
+  int time_plus_one = time + 1;
+  Event* event = 
+    cm_table_get_prev (signal->events_by_time, &time_plus_one);
+  return event ? event->time : -1;  /* -1 indicates undefined value */
+@}
+@end example
+          
+Another idiomatic application of @code{cm_Table}'s order functions is to tear
+down a table, freeing its entries in the process.  We implement
+@code{signal_free()}, for example, as follows:
+
+@example
+void
+signal_free (Signal* signal)
+@{
+  Event *event;
+
+  while (event = cm_table_del_min (signal->events_by_time, NULL))
+    free (event);
+
+  cm_table_free (signal->events_by_time);
+  free (signal);
+@}
+@end example
+
+Note here that we pass @code{NULL} as the @code{index_ref} argument to
+@code{cm_table_del_min()}.  If this argument were a non-null index reference,
+@code{cm_table_del_min()} would assign it the index of the minimal entry.
+Since, however, we are not interested in this value in this case, we pass
+@code{NULL} and @code{cm_table_del_min()} does not do this assignment.
+
+@node Multidimensional comparison functions, Advanced memory management issues, Operations on entry order, Table Class
+@section Multidimensional comparison functions
+
+In preceding examples, our tables were logically one dimensional vectors.  With
+more complex comparison functions, however, we can also use the @code{cm_Table}
+class to represent multidimensional matrixes.
+
+Imagine needing to represent a very large sparse two dimensional matrix for a
+numerical application (a sparse matrix is one in which only a small proportion
+of the matrix elements are non-zero).  We could of course represent the matrix
+by a simple array, but this would be inefficient use of space.  Instead, we can
+use a @code{cm_Table} to store only those elements which are non-zero.
+
+We represent an element of the matrix by a structure as follows:
+
+@example
+typedef struct @{
+  int  x, y;
+  double value;
+@} Element;
+@end example
+
+We write a comparison function for elements which considers both the x and y
+coordinates in comparing two elements:
+
+@example
+int 
+element_cmp (Element* e1, Element* e2)
+@{ 
+  int cmp;
+  (cmp = e1->x - e2->x) ||
+  (cmp = e1->y - e2->y);
+  return cmp;
+@}
+@end example
+
+@code{element_cmp()} first compares the x coordinates of the given elements.
+In the case where the x coordinates are the same, the function goes on to
+compare the y coordinates.
+
+Now we can implement an @code{Matrix} class as follows:
+
+@example
+typedef struct @{
+  cm_Table* elements_by_coords;
+@} Matrix;
+
+Matrix *
+matrix_new ()
+@{
+  Matrix* matrix = malloc (sizeof (Matrix));
+  matrix->elements_by_coords = cm_table_new (element_cmp);
+  return matrix;
+@}
+@end example
+
+@example
+void
+matrix_free (Matrix* matrix)
+@{
+  Element* element;
+
+  /* tear down the table in the canonical way */
+  for (element = cm_table_get_min (m->elements_by_coords, NULL);
+       element;
+       element = cm_table_get_next (m->elements_by_coords, &element)
+  @{
+    free (element);
+  @}
+
+  free (matrix->elements_by_coords);
+  free (matrix);
+@}
+@end example
+
+@example
+double
+matrix_put (Matrix* matrix, unsigned int x, unsigned int y, 
+            double value)
+@{
+  Element element_rec, *element;
+        
+  /* look for an existing element at these coordinates */
+  element_rec.x = x;  element_rec.y = y;
+  element = cm_table_get (elements_by_coords, &element_rec))
+
+  if (!element)  /* build a new element and enter it in the table */
+  @{
+    element = malloc (sizeof (Element));
+    element->x = x;
+    element->y = y;
+    cm_table_put (matrix->elements_by_coords, element);
+  @}
+
+  return element->value = value;
+@}
+@end example
+
+@example
+double
+matrix_get (Matrix* matrix, unsigned int x, unsigned int y)
+@{
+  Element element_rec, *element;
+  element_rec.x = x;  element_rec.y = y;
+  element = cm_table_get (elements_by_coords, &element_rec);
+  return element ? element->value : 0.0;
+@}
+@end example
+
+Note the use of the variable @code{element_rec} in @code{matrix_get()}.  We use
+@code{element_rec} as a temporary index.  We copy the @code{x} and @code{y}
+arguments into the x and y fields of element_rec, respectively, and pass the
+address of element_rec to @code{cm_table_get} as the index.  Since element_rec
+serves only as an index we do not need to assign the its value field - the
+value field is not considered by element_cmp.  If @code{cm_table_get} then
+finds an element at this index, that element will have x and y fields identical
+to those of element_rec, and it will also have a valid value field.
+
+@node Advanced memory management issues,  , Multidimensional comparison functions, Table Class
+@section Advanced memory management issues
+
+In our previous @code{cm_Table} examples, we have used one or more fields of a
+struct as the index and the base address of the struct itself as the contents.
+This is the most convenient way to use @code{cm_Tables} because it simplifies
+memory management.  Specifically, when tearing down such a table, we need only
+to retrive the contents in order to free dynamic memory; the indexes are
+contained within that memory.
+
+In some cases however, indexes and contents may both reference dynamic memory.
+In the following code, for example, we build and destroy a table which
+represents a mapping from one set of strings to another:
+
+@example
+#include "cm_table.h"
+
+char* S1[] = @{"fred", "bob", "joe", NULL@};
+char* S2[] = @{"jane", "sue", "sam", NULL@};
+
+main ()
+@{
+  cm_Table* table = build_table (S1, S2);
+  destroy_table (table);
+@}
+@end example
+        
+@example
+cm_Table * 
+build_table (char** s1, char** s2)
+@{
+  cm_Table* table = cm_table_new (strcmp);
+
+  while (*s1 && *s2)
+  @{
+    /* NB: we enter dynamically allocated copies of the 
+     * strings into the table.  don't forget to free them! */
+    cm_table_put (table, strdup (*s1++), strdup (*s2++));
+  @}
+
+  return table;
+@}
+@end example
+
+@example
+void
+destroy_table (cm_Table* table)
+@{
+  char *index, *contents;
+  char *prev_index = NULL;
+
+  for (contents = cm_table_get_min (table, &index);
+       contents;
+       cm_table_get_next (table, &index))
+  @{
+    free (contents);
+    if (prev_index) 
+      free (prev_index);  /* free index from previous iteration */
+    prev_index = index;   /* save index to free it next iteration */
+  @}
+  
+  if (prev_index) 
+    free (prev_index);  /* free the last index */
+@}
+@end example
+	
+The tricky part in this example arises when we destroy the table.  Since we
+allocated dynamic memory (with strdup) to store the index and contents strings
+in build_table, we must free both the contents and the index in destroy_table.
+In destroy_table, @code{cm_table_get_next()} assigns the index to the
+index-reference argument.  We cannot, however, free the index immediately after
+getting it from @code{cm_table_del_next()} because we must supply this same
+index to the next call to @code{cm_table_get_next()} in order to find the next
+entry.  We need to delay freeing the index for one iteration of the for-loop.
+We do this with the last_index variable.
+
+@node Num Macros, Stacks, Table Class, Top
+@chapter Num Macros
+
+Sometimes we want the contents of a data structure to be an integer.  For
+each put, get and del function there is a @dfn{num} (number) macro which 
+allows storage or retrieval of non-negative integers instead of pointers.  
+The num macros append @code{_num} to the regular function name.  The num
+macros for the list class, for example, are defined as follows:
+
+@example
+#define cm_list_put_num(list, index, num) \\
+  (((int) cm_list_put (list, index, (void*) ((num) + 1))) - 1)
+
+#define cm_list_get_num(list, index) \\
+  (((int) cm_list_get (list, index)) - 1)
+
+#define cm_list_del_num(list, index) \\
+  (((int) cm_list_del (list, index)) - 1)
+@end example
+
+The num macros add 1 to numbers for storage and subtract 1 upon retrieval,
+and cast int to pointers and vice-versa.  The result is that these macros 
+return @code{-1} on error instead of @code{NULL}. 
+
+Yes, this assumes that pointers and integers are the same size which is
+strictly bad programming style.  The absolutely portable alternative to the
+num macros is to store pointers to dynamically allocated integers.
+
+@node Stacks, Sets, Num Macros, Top
+@chapter Stacks
+
+The stack class is just a frontend to the list class.  The functionality is
+exactly the same, but the names ``@code{push}'', ``@code{pop}'', and
+``@code{top}'' seem much more expressive than ``@code{put_head}'', etc, when
+using a @code{cm_List} logically as a stack.  The macro definitions say it all:
+
+@example
+#define cm_Stack                        cm_List
+#define cm_stack_new()                  cm_list_new()
+#define cm_stack_free(obj)              cm_list_free(obj)
+#define cm_stack_push(obj, ptr)         cm_list_put(obj, 0, ptr)
+#define cm_stack_top(obj)               cm_list_get(obj, 0)
+#define cm_stack_pop(obj)               cm_list_del(obj, 0)
+#define cm_stack_put(obj, i, ptr)       cm_list_put(obj, i, ptr)
+#define cm_stack_get(obj, i)            cm_list_get(obj, i)
+#define cm_stack_del(obj, i)            cm_list_del(obj, i)
+#define cm_stack_push_num(obj, num)     cm_list_put_num(obj, 0, num)
+#define cm_stack_top_num(obj)           cm_stack_get_num(obj, 0)
+#define cm_stack_pop_num(obj)           cm_stack_del_num(obj, 0)
+#define cm_stack_put_num(obj, i, num)   cm_list_put_num(obj, i, num)
+#define cm_stack_get_num(obj, i)        cm_list_get_num(obj, i)
+#define cm_stack_del_num(obj, i)        cm_list_del_num(obj, i)
+#define cm_stack_size(obj)              cm_list_size(obj)
+@end example
+
+@node Sets, Conventions, Stacks, Top
+@chapter Sets
+
+Sometime you want to know if a table has an entry for some index, but you 
+don't need the entry to associate any "contents" with the entry.  The set
+class is a macro frontend to the table class which allows you to neglect
+associating something with each entry.  Basically, the macros duplicate the
+index in the contents.  The definitions are as follows:
+
+@example
+#define cm_Set                          cm_Table
+#define cm_set_new(cmp_func)            cm_table_new(cmp_func)
+#define cm_set_free(obj)                cm_table_free(obj)
+#define cm_set_put(obj, ptr)            cm_table_put(obj, ptr, ptr)
+#define cm_set_get(obj, ptr)            cm_table_get(obj, ptr)
+#define cm_set_del(obj, ptr)            cm_table_del(obj, ptr)
+#define cm_set_get_min(obj)             cm_table_get_min(obj, NULL)
+#define cm_set_get_max(obj)             cm_table_get_max(obj, NULL)
+#define cm_set_del_min(obj)             cm_table_del_min(obj, NULL)
+#define cm_set_del_max(obj)             cm_table_del_max(obj, NULL)
+#define cm_set_get_prev(obj, ptr_ref)   cm_table_get_prev(obj, ptr_ref)
+#define cm_set_get_next(obj, ptr_ref)   cm_table_get_next(obj, ptr_ref)
+#define cm_set_del_prev(obj, ptr_ref)   cm_table_del_prev(obj, ptr_ref)
+#define cm_set_del_next(obj, ptr_ref)   cm_table_del_next(obj, ptr_ref)
+#define cm_set_put_num(obj, i)          cm_table_put_num(obj, i, i)
+#define cm_set_get_num(obj, i)          cm_table_get_num(obj, i)
+#define cm_set_del_num(obj, i)          cm_table_del_num(obj, i)
+#define cm_set_get_min_num(obj)         cm_table_get_min_num(obj, NULL)
+#define cm_set_get_max_num(obj)         cm_table_get_max_num(obj, NULL)
+#define cm_set_del_min_num(obj)         cm_table_del_min_num(obj, NULL)
+#define cm_set_del_max_num(obj)         cm_table_del_max_num(obj, NULL)
+#define cm_set_size(obj)                cm_table_size(obj)
+@end example
+
+The need for sets occurs most often when we want to establish uniqueness among
+a collection of objects.  Imagine needing to scan a @code{NULL}-terminated
+array of strings to determine how many unique strings it contains.  The
+following function would do this:
+
+@example
+int 
+count_unique_string (char* s)
+@{
+  cm_Set* string_set = cm_set_new (strcmp);
+  int count;
+
+  for (; s; s++)
+  @{
+    if (!cm_set_get (string_set, s))
+      cm_set_put (string_set, s);
+  @}
+
+  count = cm_set_size (string_set);
+  cm_set_free (string_set);
+
+  return count;
+@}
+@end example
+           
+
+Now recall the definition of the @code{Employee} structure:
+
+@example
+typedef struct @{
+  char *name;
+  int  salary;
+@} Employee;
+@end example
+
+We could write a comparison function for @code{Employee}s like this:
+
+@example
+int 
+employee_cmp (Employee* e1, Employee* e2)
+@{ 
+  int cmp;
+  (cmp = strcmp (e1->name, e2->name)) ||
+  (cmp = strcmp (e1->salary, e2->salary));
+  return cmp;
+@}
+@end example     
+
+Given @code{employee_cmp()}, we can now build a table of "employees 
+indexed by employees":
+
+@example
+Employee E[] = @{
+  @{ "Fred", 45000 @},
+  @{ "Doug", 30000 @},
+  @{ "Horace", 50000 @},
+@};
+
+int
+main ()
+@{       
+  cm_Set *employees = cm_table_new(employee_cmp);
+  Employee *e, e_rec;
+
+  /* build table of employees */
+  for (e = E;  e - E < sizeof E;  e++)
+    cm_set_put (employees, e);
+
+  /* check to see if we have an employee @{ "Horace", 50000 @} */
+  e_rec.name = "Horace";
+  e_rec.salary = 50000;
+
+  return cm_set_get (employees, &e_rec) != NULL;
+@}
+@end example          
+
+@node Conventions,  , Sets, Top
+@chapter Conventions
+
+
+All external symbols defined by Libcm are prefixed by ``@code{cm_}''.
+
+All type-names begin with a capital letter following the ``@code{cm_}'' prefix
+(eg: ``@code{cm_List}'').
+
+All functions and macros which operate on an object take the object as 
+the first argument.
+
+Each class defines at least the functions ``@code{new}'', ``@code{free}'',
+``@code{put}'', ``@code{get}'', and ``@code{del}'', and the macro
+``@code{size}''.
+
+Function and macro names are of the form
+``@code{cm_}@var{class}@code{_}@var{operation}''.
+
+@contents
+@bye

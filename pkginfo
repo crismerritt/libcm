@@ -1,0 +1,13 @@
+#
+# $Id: pkginfo,v 1.1 2000/08/25 05:07:44 z60hc70 Exp $
+#
+PKG=cmlibcm
+VERSION=1.0.0
+NAME=Cris Merritt's Container C library
+DESC=Routines which allow you place and order structures in containers
+ARCH=sparc
+CATEGORY=application
+CLASSES=none
+BASEDIR=/opt
+OWNER=bin
+GROUP=bin
